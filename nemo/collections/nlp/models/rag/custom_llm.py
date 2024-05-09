@@ -1,21 +1,16 @@
-from typing import Optional, List, Mapping, Any
+from typing import Any, List, Mapping, Optional
 
-from llama_index.core import SimpleDirectoryReader, SummaryIndex
-from llama_index.core.callbacks import CallbackManager
-from llama_index.core.llms import (
-    CustomLLM,
-    CompletionResponse,
-    CompletionResponseGen,
-    LLMMetadata,
-)
+from llama_index.core import Settings, SimpleDirectoryReader, SummaryIndex
 from llama_index.core.bridge.pydantic import PrivateAttr
-
+from llama_index.core.callbacks import CallbackManager
+from llama_index.core.llms import CompletionResponse, CompletionResponseGen, CustomLLM, LLMMetadata
 from llama_index.core.llms.callbacks import llm_completion_callback
-from llama_index.core import Settings
+from pytorch_lightning.trainer.trainer import Trainer
+
 from nemo.collections.nlp.models.language_modeling.megatron_gpt_model import MegatronGPTModel
 from nemo.collections.nlp.modules.common.transformer.text_generation import LengthParam, SamplingParam
-from pytorch_lightning.trainer.trainer import Trainer
 from nemo.collections.nlp.parts.nlp_overrides import NLPDDPStrategy
+
 
 class NeMoLLM(CustomLLM):
     context_window: int = 2048
@@ -44,12 +39,7 @@ class NeMoLLM(CustomLLM):
     _model_cfg: Any = PrivateAttr()
     _tokenizer: Any = PrivateAttr()
 
-    def __init__(
-        self,
-        model_path: str = None,
-        cfg: Any = None,
-        **kwargs: Any,
-    ) -> None:
+    def __init__(self, model_path: str = None, cfg: Any = None, **kwargs: Any,) -> None:
 
         # set up trainer
         trainer_config = {
@@ -57,9 +47,9 @@ class NeMoLLM(CustomLLM):
             "num_nodes": 1,
             "accelerator": "gpu",
             "logger": False,
-            "precision": cfg.trainer.precision
+            "precision": cfg.trainer.precision,
         }
-    
+
         tensor_model_parallel_size = 1
         pipeline_model_parallel_size = 1
 
@@ -78,7 +68,9 @@ class NeMoLLM(CustomLLM):
         print("self._model_cfg: ", self._model_cfg)
 
         # restore model
-        model = MegatronGPTModel.restore_from(restore_path=model_path, trainer=trainer, override_config_path=model_cfg, strict=True)
+        model = MegatronGPTModel.restore_from(
+            restore_path=model_path, trainer=trainer, override_config_path=model_cfg, strict=True
+        )
         model.freeze()
         self._model = model
         super().__init__(**kwargs)
@@ -89,24 +81,22 @@ class NeMoLLM(CustomLLM):
     @property
     def metadata(self) -> LLMMetadata:
         """Get LLM metadata."""
-        return LLMMetadata(
-            context_window=self.context_window,
-            num_output=self.num_output,
-            model_name=self.model_name,
-        )
+        return LLMMetadata(context_window=self.context_window, num_output=self.num_output, model_name=self.model_name,)
 
     @llm_completion_callback()
     def complete(self, prompt: str, **kwargs: Any) -> CompletionResponse:
-        llm_response = self._model.generate(inputs=[prompt], length_params=self.length_params, sampling_params=self.sampling_params)
+        llm_response = self._model.generate(
+            inputs=[prompt], length_params=self.length_params, sampling_params=self.sampling_params
+        )
         text_response = llm_response['sentences'][0]
 
         return CompletionResponse(text=text_response)
 
     @llm_completion_callback()
-    def stream_complete(
-        self, prompt: str, **kwargs: Any
-    ) -> CompletionResponseGen:
-        llm_response = self._model.generate(inputs=[prompt], length_params=self.length_params, sampling_params=self.sampling_params)
+    def stream_complete(self, prompt: str, **kwargs: Any) -> CompletionResponseGen:
+        llm_response = self._model.generate(
+            inputs=[prompt], length_params=self.length_params, sampling_params=self.sampling_params
+        )
         text_response = llm_response['sentences'][0]
 
         response = ""
